@@ -1,0 +1,10 @@
+{
+  "server_url": "http://localhost:2283",
+  "api_key": "",
+  "default_device_id": "claude-code",
+  "preferences": {
+    "max_upload_size_mb": 100,
+    "default_output_format": "json",
+    "pagination_limit": 50
+  }
+}
