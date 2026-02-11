@@ -462,13 +462,442 @@ download_asset() {
 }
 
 # ============================================================================
+# 共享链接操作
+# ============================================================================
+
+# 获取所有共享链接
+# GET /api/shared-links
+get_all_shared_links() {
+    immich_api_request "GET" "/api/shared-links"
+}
+
+# 创建共享链接
+# POST /api/shared-links
+# 参数: json_data
+create_shared_link() {
+    local json_data="$1"
+
+    if [[ -z "$json_data" ]]; then
+        echo "错误: 共享链接数据不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "POST" "/api/shared-links" "$json_data"
+}
+
+# 创建简单共享链接（便捷函数）
+# 参数: type (album|assets) id [description] [expires_at] [allow_download] [show_metadata]
+create_simple_shared_link() {
+    local type="$1"
+    local id="$2"
+    local description="${3:-}"
+    local expires_at="${4:-}"
+    local allow_download="${5:-true}"
+    local show_metadata="${6:-true}"
+
+    if [[ -z "$type" ]] || [[ -z "$id" ]]; then
+        echo "错误: 类型和 ID 不能为空" >&2
+        return 1
+    fi
+
+    local data
+    if [[ "$type" == "album" ]]; then
+        data=$(jq -n \
+            --arg aid "$id" \
+            --arg desc "$description" \
+            --arg exp "$expires_at" \
+            --argjson dl "$allow_download" \
+            --argjson meta "$show_metadata" \
+            '{type: "ALBUM", albumId: $aid, description: $desc, expiresAt: $exp, allowDownload: $dl, showMetadata: $meta} | with_entries(select(.value != ""))')
+    else
+        # assets type
+        local asset_ids_json=$(echo "$id" | jq -R . | jq -s .)
+        data=$(jq -n \
+            --argjson aids "$asset_ids_json" \
+            --arg desc "$description" \
+            --arg exp "$expires_at" \
+            --argjson dl "$allow_download" \
+            --argjson meta "$show_metadata" \
+            '{type: "INDIVIDUAL", assetIds: $aids, description: $desc, expiresAt: $exp, allowDownload: $dl, showMetadata: $meta} | with_entries(select(.value != ""))')
+    fi
+
+    immich_api_request "POST" "/api/shared-links" "$data"
+}
+
+# 获取当前共享链接
+# GET /api/shared-links/me
+get_my_shared_link() {
+    immich_api_request "GET" "/api/shared-links/me"
+}
+
+# 获取指定共享链接
+# GET /api/shared-links/{id}
+# 参数: link_id
+get_shared_link_by_id() {
+    local link_id="$1"
+
+    if [[ -z "$link_id" ]]; then
+        echo "错误: 共享链接 ID 不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "GET" "/api/shared-links/$link_id"
+}
+
+# 更新共享链接
+# PATCH /api/shared-links/{id}
+# 参数: link_id json_data
+update_shared_link() {
+    local link_id="$1"
+    local json_data="$2"
+
+    if [[ -z "$link_id" ]]; then
+        echo "错误: 共享链接 ID 不能为空" >&2
+        return 1
+    fi
+
+    if [[ -z "$json_data" ]]; then
+        echo "错误: 更新数据不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "PATCH" "/api/shared-links/$link_id" "$json_data"
+}
+
+# 删除共享链接
+# DELETE /api/shared-links/{id}
+# 参数: link_id
+remove_shared_link() {
+    local link_id="$1"
+
+    if [[ -z "$link_id" ]]; then
+        echo "错误: 共享链接 ID 不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "DELETE" "/api/shared-links/$link_id"
+}
+
+# 添加资源到共享链接
+# PUT /api/shared-links/{id}/assets
+# 参数: link_id asset_id1 [asset_id2 ...]
+add_shared_link_assets() {
+    local link_id="$1"
+    shift
+
+    if [[ -z "$link_id" ]]; then
+        echo "错误: 共享链接 ID 不能为空" >&2
+        return 1
+    fi
+
+    if [[ $# -eq 0 ]]; then
+        echo "错误: 至少需要一个资源 ID" >&2
+        return 1
+    fi
+
+    # 构建资源 ID 数组
+    local asset_ids_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+    local data=$(jq -n --argjson ids "$asset_ids_json" '{assetIds: $ids}')
+
+    immich_api_request "PUT" "/api/shared-links/$link_id/assets" "$data"
+}
+
+# 从共享链接移除资源
+# DELETE /api/shared-links/{id}/assets
+# 参数: link_id asset_id1 [asset_id2 ...]
+remove_shared_link_assets() {
+    local link_id="$1"
+    shift
+
+    if [[ -z "$link_id" ]]; then
+        echo "错误: 共享链接 ID 不能为空" >&2
+        return 1
+    fi
+
+    if [[ $# -eq 0 ]]; then
+        echo "错误: 至少需要一个资源 ID" >&2
+        return 1
+    fi
+
+    # 构建资源 ID 数组
+    local asset_ids_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+    local data=$(jq -n --argjson ids "$asset_ids_json" '{assetIds: $ids}')
+
+    immich_api_request "DELETE" "/api/shared-links/$link_id/assets" "$data"
+}
+
+# ============================================================================
+# 标签操作
+# ============================================================================
+
+# 获取所有标签
+# GET /api/tags
+get_all_tags() {
+    immich_api_request "GET" "/api/tags"
+}
+
+# 创建新标签
+# POST /api/tags
+# 参数: tag_name [color]
+create_tag() {
+    local tag_name="$1"
+    local color="${2:-}"
+
+    if [[ -z "$tag_name" ]]; then
+        echo "错误: 标签名称不能为空" >&2
+        return 1
+    fi
+
+    local data
+    if [[ -n "$color" ]]; then
+        data=$(jq -n \
+            --arg name "$tag_name" \
+            --arg c "$color" \
+            '{name: $name, color: $c}')
+    else
+        data=$(jq -n \
+            --arg name "$tag_name" \
+            '{name: $name}')
+    fi
+
+    immich_api_request "POST" "/api/tags" "$data"
+}
+
+# 批量创建或更新标签
+# PUT /api/tags
+# 参数: json_data (包含标签数组的 JSON)
+upsert_tags() {
+    local json_data="$1"
+
+    if [[ -z "$json_data" ]]; then
+        echo "错误: 标签数据不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "PUT" "/api/tags" "$json_data"
+}
+
+# 获取指定标签
+# GET /api/tags/{id}
+# 参数: tag_id
+get_tag_by_id() {
+    local tag_id="$1"
+
+    if [[ -z "$tag_id" ]]; then
+        echo "错误: 标签 ID 不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "GET" "/api/tags/$tag_id"
+}
+
+# 更新标签
+# PUT /api/tags/{id}
+# 参数: tag_id json_data
+update_tag() {
+    local tag_id="$1"
+    local json_data="$2"
+
+    if [[ -z "$tag_id" ]]; then
+        echo "错误: 标签 ID 不能为空" >&2
+        return 1
+    fi
+
+    if [[ -z "$json_data" ]]; then
+        echo "错误: 更新数据不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "PUT" "/api/tags/$tag_id" "$json_data"
+}
+
+# 删除标签
+# DELETE /api/tags/{id}
+# 参数: tag_id
+delete_tag() {
+    local tag_id="$1"
+
+    if [[ -z "$tag_id" ]]; then
+        echo "错误: 标签 ID 不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "DELETE" "/api/tags/$tag_id"
+}
+
+# 为资源添加标签
+# PUT /api/tags/{id}/assets
+# 参数: tag_id asset_id1 [asset_id2 ...]
+tag_assets() {
+    local tag_id="$1"
+    shift
+
+    if [[ -z "$tag_id" ]]; then
+        echo "错误: 标签 ID 不能为空" >&2
+        return 1
+    fi
+
+    if [[ $# -eq 0 ]]; then
+        echo "错误: 至少需要一个资源 ID" >&2
+        return 1
+    fi
+
+    # 构建资源 ID 数组
+    local asset_ids_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+    local data=$(jq -n --argjson ids "$asset_ids_json" '{assetIds: $ids}')
+
+    immich_api_request "PUT" "/api/tags/$tag_id/assets" "$data"
+}
+
+# 移除资源标签
+# DELETE /api/tags/{id}/assets
+# 参数: tag_id asset_id1 [asset_id2 ...]
+untag_assets() {
+    local tag_id="$1"
+    shift
+
+    if [[ -z "$tag_id" ]]; then
+        echo "错误: 标签 ID 不能为空" >&2
+        return 1
+    fi
+
+    if [[ $# -eq 0 ]]; then
+        echo "错误: 至少需要一个资源 ID" >&2
+        return 1
+    fi
+
+    # 构建资源 ID 数组
+    local asset_ids_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+    local data=$(jq -n --argjson ids "$asset_ids_json" '{assetIds: $ids}')
+
+    immich_api_request "DELETE" "/api/tags/$tag_id/assets" "$data"
+}
+
+# 批量为资源添加标签
+# PUT /api/tags/assets
+# 参数: json_data (包含 assetIds 和 tagIds 的 JSON)
+bulk_tag_assets() {
+    local json_data="$1"
+
+    if [[ -z "$json_data" ]]; then
+        echo "错误: 标签数据不能为空" >&2
+        return 1
+    fi
+
+    immich_api_request "PUT" "/api/tags/assets" "$json_data"
+}
+
+# ============================================================================
 # 服务器信息
 # ============================================================================
 
-# 获取服务器版本（用于测试连接）
-# GET /api/server-info/version
+# 获取服务器信息
+# GET /api/server/about
+get_about_info() {
+    immich_api_request "GET" "/api/server/about"
+}
+
+# 获取 APK 下载链接
+# GET /api/server/apk-links
+get_apk_links() {
+    immich_api_request "GET" "/api/server/apk-links"
+}
+
+# 获取服务器配置
+# GET /api/server/config
+get_server_config() {
+    immich_api_request "GET" "/api/server/config"
+}
+
+# 获取服务器功能
+# GET /api/server/features
+get_server_features() {
+    immich_api_request "GET" "/api/server/features"
+}
+
+# 获取服务器许可证
+# GET /api/server/license
+get_server_license() {
+    immich_api_request "GET" "/api/server/license"
+}
+
+# 设置服务器许可证
+# PUT /api/server/license
+# 参数: license_key activation_key
+set_server_license() {
+    local license_key="$1"
+    local activation_key="$2"
+
+    if [[ -z "$license_key" ]]; then
+        echo "错误: 许可证密钥不能为空" >&2
+        return 1
+    fi
+
+    if [[ -z "$activation_key" ]]; then
+        echo "错误: 激活密钥不能为空" >&2
+        return 1
+    fi
+
+    local data=$(jq -n \
+        --arg lk "$license_key" \
+        --arg ak "$activation_key" \
+        '{licenseKey: $lk, activationKey: $ak}')
+
+    immich_api_request "PUT" "/api/server/license" "$data"
+}
+
+# 删除服务器许可证
+# DELETE /api/server/license
+delete_server_license() {
+    immich_api_request "DELETE" "/api/server/license"
+}
+
+# 获取支持的媒体类型
+# GET /api/server/media-types
+get_supported_media_types() {
+    immich_api_request "GET" "/api/server/media-types"
+}
+
+# Ping 服务器
+# GET /api/server/ping
+ping_server() {
+    immich_api_request "GET" "/api/server/ping"
+}
+
+# 获取服务器统计信息
+# GET /api/server/statistics
+get_server_statistics() {
+    immich_api_request "GET" "/api/server/statistics"
+}
+
+# 获取存储信息
+# GET /api/server/storage
+get_storage() {
+    immich_api_request "GET" "/api/server/storage"
+}
+
+# 获取服务器主题
+# GET /api/server/theme
+get_theme() {
+    immich_api_request "GET" "/api/server/theme"
+}
+
+# 获取服务器版本
+# GET /api/server/version
 get_server_version() {
-    immich_api_request "GET" "/api/server-info/version"
+    immich_api_request "GET" "/api/server/version"
+}
+
+# 获取版本检查状态
+# GET /api/server/version-check
+get_version_check() {
+    immich_api_request "GET" "/api/server/version-check"
+}
+
+# 获取版本历史
+# GET /api/server/version-history
+get_version_history() {
+    immich_api_request "GET" "/api/server/version-history"
 }
 
 # 测试 API 连接
