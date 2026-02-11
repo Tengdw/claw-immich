@@ -72,39 +72,42 @@ read_input() {
     local prompt="$1"
     local default="$2"
     local is_secret="${3:-false}"
+    local user_input
 
     if [[ -n "$default" ]]; then
         prompt="$prompt [$default]"
     fi
 
-    echo -n "$prompt: "
-
     if [[ "$is_secret" == "true" ]]; then
         # 隐藏输入（用于密钥）
-        read -s user_input
+        read -s -p "$prompt: " user_input
         echo ""
     else
-        read user_input
+        read -p "$prompt: " user_input
     fi
 
     # 如果用户未输入，使用默认值
     if [[ -z "$user_input" && -n "$default" ]]; then
         echo "$default"
-    else
-        echo "$user_input"
+        return
     fi
+
+    echo "$user_input"
 }
 
 # 验证 URL 格式
 validate_url() {
     local url="$1"
 
+    # 去除前后空白字符
+    url=$(echo "$url" | xargs)
+
     if [[ -z "$url" ]]; then
         print_error "服务器地址不能为空"
         return 1
     fi
 
-    if [[ ! "$url" =~ ^https?:// ]]; then
+    if [[ "$url" != http://* && "$url" != https://* ]]; then
         print_error "服务器地址必须以 http:// 或 https:// 开头"
         return 1
     fi
