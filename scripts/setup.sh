@@ -167,6 +167,10 @@ save_config() {
     local api_key="$2"
     local device_id="${3:-claude-code}"
 
+    # 去除可能的换行符
+    api_key=$(echo "$api_key" | tr -d '\n')
+    server_url=$(echo "$server_url" | tr -d '\n')
+
     # 创建配置目录
     mkdir -p "$CONFIG_DIR"
 
