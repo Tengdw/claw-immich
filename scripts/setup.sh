@@ -139,16 +139,14 @@ test_api_connection() {
     local http_code
 
     response=$(curl -sL -w "\n%{http_code}" \
-        -H "x-api-key: $api_key" \
         -H "Accept: application/json" \
-        "${server_url}/api/server-info/version" 2>/dev/null)
+        "${server_url}/api/server/ping" 2>/dev/null)
 
     http_code=$(echo "$response" | tail -n1)
     response=$(echo "$response" | sed '$d')
 
     if [[ "$http_code" -eq 200 ]]; then
-        local version=$(echo "$response" | jq -r '.major + "." + .minor + "." + .patch' 2>/dev/null || echo "未知")
-        print_success "连接成功！Immich 服务器版本: $version"
+        print_success "连接成功！"
         return 0
     elif [[ "$http_code" -eq 401 ]]; then
         print_error "认证失败：API 密钥无效"

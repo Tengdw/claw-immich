@@ -280,7 +280,39 @@ GET /api/assets/{id}/thumbnail
 
 ## 服务器信息端点
 
-### 获取服务器版本
+### Ping 服务器
+
+```
+GET /api/server/ping
+```
+
+**所需权限**: 无（公开端点）
+
+**响应**: 返回 `pong` 字符串。
+
+### 获取服务器信息
+
+```
+GET /api/server/about
+```
+
+**所需权限**: 需要认证
+
+**响应**:
+```json
+{
+  "diskAvailable": "xxx",
+  "diskSize": "xxx",
+  "diskUsagePercentage": xx.x,
+  "installed": true,
+  "machineType": "xxx",
+  "numCores": xx,
+  "totalMemory": "xxx",
+  "version": "1.123.0"
+}
+```
+
+### 获取服务器版本（旧版，可能已废弃）
 
 ```
 GET /api/server-info/version
@@ -297,7 +329,7 @@ GET /api/server-info/version
 }
 ```
 
-### 获取服务器配置
+### 获取服务器配置（旧版，可能已废弃）
 
 ```
 GET /api/server-info/config
